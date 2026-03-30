@@ -43,7 +43,7 @@ struct InspectorView: View {
             VariablesInspectorView(viewModel: viewModel)
         default:
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     ForEach(PropertyRegistry.definitions(for: tab)) { definition in
                         PropertyRow(definition: definition, viewModel: viewModel)
                     }
@@ -57,48 +57,50 @@ struct InspectorView: View {
 // MARK: - Property Row
 
 private struct PropertyRow: View {
+    private let labelColumnWidth: CGFloat = 140
+    private let unitColumnWidth: CGFloat = 96
+
     let definition: CSSPropertyDefinition
     @ObservedObject var viewModel: EditorViewModel
 
     var body: some View {
         let isUsed = viewModel.isPropertyUsed(definition)
 
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(definition.title)
-                        .font(.subheadline.weight(.medium))
-                    Text(definition.name)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if !isUsed {
-                    Text("Unused")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Button(role: .destructive) {
-                    viewModel.removeProperty(definition)
-                } label: {
-                    Image(systemName: "minus.circle")
-                }
-                .buttonStyle(.borderless)
-                .disabled(!isUsed)
-                .help("Remove property")
-            }
+        HStack(spacing: 8) {
+            Text(definition.title)
+                .font(.subheadline.weight(.medium))
+                .frame(width: labelColumnWidth, alignment: .leading)
 
             controlView
+                .disabled(!isUsed)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                if isUsed {
+                    viewModel.removeProperty(definition)
+                } else {
+                    viewModel.addProperty(definition)
+                }
+            } label: {
+                Image(systemName: isUsed ? "minus.circle" : "plus.circle")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(isUsed ? Color.red : Color.accentColor)
+            .help(isUsed ? "Remove property" : "Add property")
+            .frame(width: 20)
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: isUsed ? .controlBackgroundColor : .windowBackgroundColor))
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(isUsed ? 0.08 : 0.03), lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(isUsed ? 0.08 : 0), lineWidth: 1)
         )
+        .opacity(isUsed ? 1 : 0.55)
     }
 
     @ViewBuilder
@@ -115,15 +117,14 @@ private struct PropertyRow: View {
             TextField(definition.placeholder, text: Binding(
                 get: { viewModel.rawValue(for: definition) },
                 set: { viewModel.updateProperty(definition, value: $0) }
-            ), axis: .vertical)
-            .lineLimit(2...4)
+            ))
             .textFieldStyle(.roundedBorder)
 
         case .color:
             ColorPropertyControl(definition: definition, viewModel: viewModel)
 
         case let .option(options):
-            Picker(definition.title, selection: Binding(
+            Picker("", selection: Binding(
                 get: {
                     let current = viewModel.rawValue(for: definition)
                     return current.isEmpty ? definition.placeholder : current
@@ -135,6 +136,8 @@ private struct PropertyRow: View {
                 }
             }
             .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
         case let .measurement(units):
             HStack(spacing: 8) {
@@ -146,8 +149,9 @@ private struct PropertyRow: View {
                     }
                 ))
                 .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
 
-                Picker("Unit", selection: Binding(
+                Picker("", selection: Binding(
                     get: { viewModel.measurementUnit(for: definition) },
                     set: { unit in
                         let number = viewModel.measurementNumber(for: definition)
@@ -159,8 +163,10 @@ private struct PropertyRow: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 110)
+                .labelsHidden()
+                .frame(width: unitColumnWidth)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -205,18 +211,22 @@ private struct ColorPropertyControl: View {
                 }
             ))
             .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: .infinity)
             .onAppear { textValue = rawValue }
             .onChange(of: rawValue) { _, newRaw in
                 if !isEditingText { textValue = newRaw }
             }
             .onSubmit { isEditingText = false }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 // MARK: - Variables Inspector
 
 private struct VariablesInspectorView: View {
+    private let nameColumnWidth: CGFloat = 180
+
     @ObservedObject var viewModel: EditorViewModel
 
     var body: some View {
@@ -230,44 +240,58 @@ private struct VariablesInspectorView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                ForEach(viewModel.rootVariables) { variable in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(variable.name)
-                                .font(.subheadline.weight(.medium))
-                            Spacer()
-                            Button(role: .destructive) {
-                                viewModel.removeVariable(name: variable.name)
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                        }
+                ForEach(viewModel.rootVariables.indices, id: \.self) { index in
+                    let variable = viewModel.rootVariables[index]
+                    HStack(spacing: 8) {
+                        Text(variable.name)
+                            .font(.subheadline.weight(.medium))
+                            .frame(width: nameColumnWidth, alignment: .leading)
 
                         TextField("Value", text: Binding(
                             get: { variable.value },
                             set: { viewModel.updateVariable(name: variable.name, value: $0) }
                         ))
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+
+                        Button {
+                            viewModel.removeVariable(name: variable.name)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Color.red)
+                        .help("Remove variable")
+                        .frame(width: 20)
                     }
-                    .padding(12)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Add Variable")
-                        .font(.headline)
-
+                HStack(spacing: 8) {
                     TextField("--token-name", text: $viewModel.newVariableName)
                         .textFieldStyle(.roundedBorder)
+                        .frame(width: nameColumnWidth)
+
                     TextField("Value", text: $viewModel.newVariableValue)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
 
-                    Button("Add Variable") {
+                    Button {
                         viewModel.addVariable()
+                    } label: {
+                        Image(systemName: "plus.circle")
                     }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Color.accentColor)
+                    .help("Add variable")
+                    .frame(width: 20)
                 }
-                .padding(12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
             }
             .padding(12)

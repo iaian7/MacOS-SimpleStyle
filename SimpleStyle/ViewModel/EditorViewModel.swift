@@ -96,6 +96,15 @@ final class EditorViewModel: ObservableObject {
         scrollCurrentRuleIntoView()
     }
 
+    func addProperty(_ definition: CSSPropertyDefinition) {
+        switch definition.control {
+        case let .measurement(units):
+            updateMeasurementProperty(definition, numberOrRaw: definition.placeholder, unit: units.first ?? "")
+        default:
+            updateProperty(definition, value: definition.placeholder)
+        }
+    }
+
     func measurementNumber(for definition: CSSPropertyDefinition) -> String {
         let raw = rawValue(for: definition)
         return CSSEngine.parseMeasurement(raw)?.number ?? raw
