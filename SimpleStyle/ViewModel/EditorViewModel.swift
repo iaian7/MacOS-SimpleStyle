@@ -7,7 +7,7 @@ final class EditorViewModel: ObservableObject {
     @Published var previewURLString = "http://localhost:3000"
     @Published var previewCSS = ""
     @Published var reloadToken = UUID()
-    @Published var selectedRange = NSRange(location: 0, length: 0)
+    var selectedRange = NSRange(location: 0, length: 0)
     @Published var currentRule: CSSRuleContext?
     @Published var selectedTab: InspectorTabKey = .layout
     @Published var rootVariables: [CSSDeclaration] = []
@@ -51,8 +51,14 @@ final class EditorViewModel: ObservableObject {
     }
 
     func handleSelectionChanged(_ newRange: NSRange) {
+        guard NSEqualRanges(selectedRange, newRange) == false else {
+            return
+        }
+
         selectedRange = newRange
-        refreshCurrentRule(scrollIntoView: true)
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshCurrentRule(scrollIntoView: true)
+        }
     }
 
     func loadPreview() {
@@ -159,7 +165,9 @@ final class EditorViewModel: ObservableObject {
         }
 
         rootVariables = CSSEngine.findRootRule(in: text)?.declarations.filter { $0.name.hasPrefix("--") } ?? []
-        refreshCurrentRule(scrollIntoView: false)
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshCurrentRule(scrollIntoView: false)
+        }
     }
 
     private func refreshCurrentRule(scrollIntoView: Bool) {

@@ -18,6 +18,7 @@
 		AA000001000000000000009 /* WebPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000009 /* WebPreviewView.swift */; };
 		AA000001000000000000010 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000010 /* InspectorView.swift */; };
 		AA000001000000000000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000011 /* Assets.xcassets */; };
+		AA000001000000000000012 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000014 /* AppIcon.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 		AA000002000000000000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA000002000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000002000000000000013 /* SimpleStyle.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SimpleStyle.entitlements; sourceTree = "<group>"; };
+		AA000002000000000000014 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer; path = AppIcon.icon; sourceTree = "<group>"; };
 		AA000003000000000000001 /* SimpleStyle.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleStyle.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -55,6 +57,7 @@
 				AA000005000000000000003 /* Model */,
 				AA000005000000000000004 /* ViewModel */,
 				AA000005000000000000005 /* Views */,
+				AA000002000000000000014 /* AppIcon.icon */,
 				AA000002000000000000011 /* Assets.xcassets */,
 				AA000002000000000000012 /* Info.plist */,
 				AA000002000000000000013 /* SimpleStyle.entitlements */,
@@ -116,7 +119,7 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		AA000005000000000000008 /* Root */ = {
+		AA000005000000000000008 = {
 			isa = PBXGroup;
 			children = (
 				AA000005000000000000001 /* SimpleStyle */,
@@ -167,7 +170,7 @@
 				en,
 				Base,
 			);
-			mainGroup = AA000005000000000000008 /* Root */;
+			mainGroup = AA000005000000000000008;
 			productRefGroup = AA000005000000000000007 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -182,6 +185,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000001000000000000012 /* AppIcon.icon in Resources */,
 				AA000001000000000000011 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -231,6 +235,8 @@
 					"$(inherited)",
 				);
 				INFOPLIST_FILE = SimpleStyle/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Simple Style";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -266,6 +272,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				INFOPLIST_FILE = SimpleStyle/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Simple Style";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -282,7 +290,7 @@
 			};
 			name = Release;
 		};
-		AA000011000000000000003 /* Debug - Project */ = {
+		AA000011000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -344,7 +352,7 @@
 			};
 			name = Debug;
 		};
-		AA000011000000000000004 /* Release - Project */ = {
+		AA000011000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -413,14 +421,13 @@
 		AA000007000000000000002 /* Build configuration list for PBXProject "SimpleStyle" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				AA000011000000000000003 /* Debug - Project */,
-				AA000011000000000000004 /* Release - Project */,
+				AA000011000000000000003 /* Debug */,
+				AA000011000000000000004 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = AA000010000000000000001 /* Project object */;
 }
