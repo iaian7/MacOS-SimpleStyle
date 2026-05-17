@@ -47,8 +47,10 @@ enum PropertyRegistry {
         .init(name: "bottom",                title: "Bottom",             tab: .layout,     control: .measurement(units: ["px", "%", "rem", "em"]),                                                 placeholder: "0"),
         .init(name: "left",                  title: "Left",               tab: .layout,     control: .measurement(units: ["px", "%", "rem", "em"]),                                                 placeholder: "0"),
         .init(name: "flex-direction",        title: "Flex Direction",     tab: .layout,     control: .option(["row", "column", "row-reverse", "column-reverse"]),                                   placeholder: "row"),
+        .init(name: "flex-wrap",             title: "Flex Wrap",          tab: .layout,     control: .option(["nowrap", "wrap", "wrap-reverse"]),                                                   placeholder: "wrap"),
         .init(name: "justify-content",       title: "Justify Content",    tab: .layout,     control: .option(["flex-start", "center", "flex-end", "space-between", "space-around", "space-evenly"]), placeholder: "center"),
         .init(name: "align-items",           title: "Align Items",        tab: .layout,     control: .option(["stretch", "flex-start", "center", "flex-end", "baseline"]),                          placeholder: "stretch"),
+        .init(name: "flex",                  title: "Flex",               tab: .layout,     control: .text,                                                                                         placeholder: "1 1 auto"),
         .init(name: "grid-template-columns", title: "Grid Columns",       tab: .layout,     control: .multiline,                                                                                    placeholder: "repeat(3, 1fr)"),
         .init(name: "grid-template-rows",    title: "Grid Rows",          tab: .layout,     control: .multiline,                                                                                    placeholder: "auto 1fr auto"),
 
@@ -69,6 +71,10 @@ enum PropertyRegistry {
         .init(name: "box-shadow",            title: "Shadow",             tab: .effects,    control: .multiline,                                                                                    placeholder: "0 12px 32px rgba(15, 23, 42, 0.18)"),
         .init(name: "opacity",               title: "Opacity",            tab: .effects,    control: .measurement(units: [""]),                                                                     placeholder: "0.9"),
         .init(name: "transform",             title: "Transform",          tab: .effects,    control: .multiline,                                                                                    placeholder: "translateY(-4px) scale(1.01)"),
+        .init(name: "transform-origin",      title: "Transform Origin",   tab: .effects,    control: .text,                                                                                         placeholder: "center"),
+        .init(name: "scale",                 title: "Scale",              tab: .effects,    control: .measurement(units: [""]),                                                                     placeholder: "1.1"),
+        .init(name: "rotate",                title: "Rotate",             tab: .effects,    control: .measurement(units: ["deg", "rad", "turn"]),                                                   placeholder: "90deg"),
+        .init(name: "translate",             title: "Translate",          tab: .effects,    control: .multiline,                                                                                    placeholder: "10px 20px"),
         .init(name: "overflow",              title: "Overflow",           tab: .effects,    control: .option(["visible", "hidden", "scroll", "auto"]),                                             placeholder: "visible"),
 
         // MARK: Animation

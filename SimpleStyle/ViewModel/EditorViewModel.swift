@@ -13,6 +13,9 @@ final class EditorViewModel: ObservableObject {
     @Published var rootVariables: [CSSDeclaration] = []
     @Published var newVariableName = ""
     @Published var newVariableValue = ""
+    @Published var isXRayEnabled: Bool = false
+    @Published var xraySelectedElement: XRayElementInfo?
+    @Published var xrayMatchedRules: [CSSRuleContext] = []
 
     let document: CSSDocument
 
@@ -168,12 +171,63 @@ final class EditorViewModel: ObservableObject {
         selectedTab = .variables
     }
 
+    /// Called when the user clicks an element in the X-Ray view. Stores the
+    /// element info and computes the list of matching rules. The user can then
+    /// pick one of those rules from the inspector to edit it.
+    func handleXRayElementSelected(_ info: XRayElementInfo) {
+        xraySelectedElement = info
+        let matches = CSSEngine.findRules(matching: info, in: document.text)
+        xrayMatchedRules = matches
+
+        if let first = matches.first {
+            selectRule(first)
+        } else {
+            // No matching rule — create a new block using preferred selector.
+            createNewRule(for: info)
+        }
+    }
+
+    /// Selects the given rule: moves the editor caret inside it (which
+    /// auto-populates the inspector via the existing selectionChanged flow).
+    func selectRule(_ rule: CSSRuleContext) {
+        let newRange = NSRange(location: rule.openBraceIndex + 1, length: 0)
+        selectedRange = newRange
+        textView?.setSelectedRange(newRange)
+        refreshCurrentRuleNow(scrollIntoView: true)
+    }
+
+    private func createNewRule(for info: XRayElementInfo) {
+        let selector = info.preferredSelector
+        let newBlock = "\n\n\(selector) {\n}\n"
+        let insertionPoint = document.text.utf16.count
+        document.text.append(newBlock)
+        // After the appended "\n\n<selector> {\n", caret should sit inside the braces.
+        let newLocation = insertionPoint + 2 + selector.utf16.count + 3
+        let newRange = NSRange(location: newLocation, length: 0)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.selectedRange = newRange
+            self.textView?.setSelectedRange(newRange)
+            self.refreshCurrentRuleNow(scrollIntoView: true)
+            // Refresh matched rules so the new block shows up in the list
+            self.xrayMatchedRules = CSSEngine.findRules(matching: info, in: self.document.text)
+        }
+    }
+
+    private func refreshCurrentRuleNow(scrollIntoView: Bool) {
+        refreshCurrentRule(scrollIntoView: scrollIntoView)
+    }
+
     private func refreshDerivedState(using text: String) {
         if previewCSS.isEmpty || previewCSS != text {
             previewCSS = text
         }
 
         rootVariables = CSSEngine.findRootRule(in: text)?.declarations.filter { $0.name.hasPrefix("--") } ?? []
+        if let element = xraySelectedElement {
+            xrayMatchedRules = CSSEngine.findRules(matching: element, in: text)
+        }
         DispatchQueue.main.async { [weak self] in
             self?.refreshCurrentRule(scrollIntoView: false)
         }

@@ -23,6 +23,10 @@ struct InspectorView: View {
             .padding(12)
             .background(.bar)
 
+            if let element = viewModel.xraySelectedElement {
+                MatchedRulesListView(element: element, viewModel: viewModel)
+            }
+
             TabView(selection: $viewModel.selectedTab) {
                 ForEach(InspectorTabKey.allCases) { tab in
                     inspectorContent(for: tab)
@@ -51,6 +55,77 @@ struct InspectorView: View {
                 .padding(12)
             }
         }
+    }
+}
+
+// MARK: - Matched Rules List
+
+private struct MatchedRulesListView: View {
+    let element: XRayElementInfo
+    @ObservedObject var viewModel: EditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Matched Rules")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(element.displayLabel)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            if viewModel.xrayMatchedRules.isEmpty {
+                Text("No matching rules in this stylesheet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(viewModel.xrayMatchedRules, id: \.openBraceIndex) { rule in
+                            ruleRow(rule)
+                        }
+                    }
+                }
+                .frame(maxHeight: 140)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .overlay(Divider(), alignment: .bottom)
+    }
+
+    @ViewBuilder
+    private func ruleRow(_ rule: CSSRuleContext) -> some View {
+        let isCurrent = viewModel.currentRule?.openBraceIndex == rule.openBraceIndex
+        Button {
+            viewModel.selectRule(rule)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isCurrent ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+                Text(rule.displayPath)
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Text("\(rule.declarations.count)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isCurrent ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor))
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -25,6 +25,12 @@ struct RootDocumentView: View {
                     Button("Reload") {
                         viewModel.loadPreview()
                     }
+
+                    Toggle(isOn: $viewModel.isXRayEnabled) {
+                        Image(systemName: "scope")
+                    }
+                    .toggleStyle(.button)
+                    .help("Toggle X-Ray Inspect Mode")
                 }
                 .padding(12)
                 .background(.bar)

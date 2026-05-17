@@ -1,5 +1,25 @@
 import Foundation
 
+struct XRayElementInfo: Equatable {
+    let tag: String
+    let id: String
+    let classes: [String]
+
+    var displayLabel: String {
+        var label = tag
+        if !id.isEmpty { label += "#\(id)" }
+        if !classes.isEmpty { label += "." + classes.joined(separator: ".") }
+        return label
+    }
+
+    /// Best canonical selector for "create new rule"
+    var preferredSelector: String {
+        if !id.isEmpty { return "#\(id)" }
+        if !classes.isEmpty { return "." + classes.joined(separator: ".") }
+        return tag
+    }
+}
+
 struct CSSDeclaration: Identifiable, Equatable {
     let name: String
     let value: String
@@ -72,6 +92,103 @@ enum CSSEngine {
         }
 
         return makeRuleContext(from: block, in: text, blocks: blocks)
+    }
+
+    static func findRule(matching selector: String, in text: String) -> CSSRuleContext? {
+        let blocks = scanBlocks(in: text)
+        guard let block = blocks.first(where: { !$0.isAtRule && $0.header.trimmingCharacters(in: .whitespacesAndNewlines) == selector }) else {
+            return nil
+        }
+
+        return makeRuleContext(from: block, in: text, blocks: blocks)
+    }
+
+    /// Returns every parsed CSS rule whose selector list contains at least one
+    /// simple-selector that matches the given DOM element info. Naïve matcher:
+    /// splits the selector list on commas and checks whether any compound selector
+    /// is satisfied by the element's tag / id / classes.
+    static func findRules(matching element: XRayElementInfo, in text: String) -> [CSSRuleContext] {
+        let blocks = scanBlocks(in: text)
+        var results: [CSSRuleContext] = []
+        for block in blocks {
+            guard !block.isAtRule, block.closeBraceIndex != nil else { continue }
+            let header = block.header.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !header.isEmpty else { continue }
+
+            let selectorList = header.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let matches = selectorList.contains { selectorMatches($0, element: element) }
+            if matches {
+                if let ctx = makeRuleContext(from: block, in: text, blocks: blocks) {
+                    results.append(ctx)
+                }
+            }
+        }
+        return results
+    }
+
+    /// Test whether a single compound selector (e.g. `a.btn`, `#id`, `nav a`)
+    /// would match the given element. For descendant selectors we only check
+    /// the right-most compound (the element itself) since we don't have full
+    /// DOM ancestry. This is intentionally permissive.
+    private static func selectorMatches(_ selector: String, element: XRayElementInfo) -> Bool {
+        // Use the last whitespace-separated chunk (right-most compound selector)
+        let lastCompound = selector.split(whereSeparator: { $0 == " " || $0 == ">" || $0 == "+" || $0 == "~" }).last.map(String.init) ?? selector
+        let compound = lastCompound.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !compound.isEmpty else { return false }
+
+        // Strip pseudo-classes/elements for matching purposes
+        let stripped: String = {
+            if let idx = compound.firstIndex(of: ":") {
+                return String(compound[..<idx])
+            }
+            return compound
+        }()
+        guard !stripped.isEmpty else { return false }
+
+        // Universal
+        if stripped == "*" { return true }
+
+        // Parse tag / id / classes from the compound
+        var tag = ""
+        var ids: [String] = []
+        var classes: [String] = []
+
+        var i = stripped.startIndex
+        // tag portion (until first . or #)
+        if let firstSep = stripped.firstIndex(where: { $0 == "." || $0 == "#" || $0 == "[" }) {
+            tag = String(stripped[stripped.startIndex..<firstSep])
+            i = firstSep
+        } else {
+            tag = stripped
+            i = stripped.endIndex
+        }
+
+        while i < stripped.endIndex {
+            let ch = stripped[i]
+            if ch == "." || ch == "#" {
+                let valueStart = stripped.index(after: i)
+                let valueEnd = stripped[valueStart...].firstIndex(where: { $0 == "." || $0 == "#" || $0 == "[" }) ?? stripped.endIndex
+                let value = String(stripped[valueStart..<valueEnd])
+                if ch == "." { classes.append(value) } else { ids.append(value) }
+                i = valueEnd
+            } else if ch == "[" {
+                // Skip attribute selector — treat as non-matching to be safe
+                return false
+            } else {
+                i = stripped.index(after: i)
+            }
+        }
+
+        if !tag.isEmpty, tag != "*", tag.lowercased() != element.tag.lowercased() {
+            return false
+        }
+        for id in ids where id != element.id {
+            return false
+        }
+        for cls in classes where !element.classes.contains(cls) {
+            return false
+        }
+        return true
     }
 
     static func createRootRule(in text: String) -> (text: String, rule: CSSRuleContext?) {
