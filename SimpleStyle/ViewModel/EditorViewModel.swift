@@ -16,6 +16,12 @@ final class EditorViewModel: ObservableObject {
     @Published var isXRayEnabled: Bool = false
     @Published var xraySelectedElement: XRayElementInfo?
     @Published var xrayMatchedRules: [CSSRuleContext] = []
+    /// Ancestor chain from <html> down to and including the selected element.
+    @Published var xrayAncestors: [XRayElementInfo] = []
+    /// DOM path (array of child indices from <html>) of the currently selected element.
+    @Published var xraySelectedPath: [Int] = []
+    /// Most recent request to push selection back into the webview.
+    @Published var pendingXRayPathRequest: XRaySelectionRequest?
 
     let document: CSSDocument
 
@@ -171,20 +177,66 @@ final class EditorViewModel: ObservableObject {
         selectedTab = .variables
     }
 
-    /// Called when the user clicks an element in the X-Ray view. Stores the
-    /// element info and computes the list of matching rules. The user can then
-    /// pick one of those rules from the inspector to edit it.
-    func handleXRayElementSelected(_ info: XRayElementInfo) {
+    /// Called when the user clicks an element in the X-Ray view (or when
+    /// selection is driven programmatically from the inspector tree).
+    /// Stores the element info + ancestor chain and computes matched rules.
+    func handleXRayElementSelected(_ info: XRayElementInfo, path: [Int] = [], ancestors: [XRayElementInfo] = []) {
         xraySelectedElement = info
+        xraySelectedPath = path
+        xrayAncestors = ancestors.isEmpty ? [info] : ancestors
         let matches = CSSEngine.findRules(matching: info, in: document.text)
         xrayMatchedRules = matches
 
         if let first = matches.first {
             selectRule(first)
         } else {
-            // No matching rule — create a new block using preferred selector.
-            createNewRule(for: info)
+            // No matching rule yet — leave the editor caret as-is. The user can
+            // explicitly create a new block from the Matched Rules list if they
+            // want one. (Auto-creating on every ancestor click was too noisy.)
+            currentRule = nil
         }
+    }
+
+    /// Programmatically select an ancestor at `index` in `xrayAncestors`.
+    /// Truncates the DOM path accordingly and asks the webview to re-select.
+    func selectXRayAncestor(at index: Int) {
+        guard index >= 0, index < xrayAncestors.count else { return }
+        let ancestor = xrayAncestors[index]
+
+        // xrayAncestors goes from <html> (index 0) down to the clicked element
+        // (last index). xraySelectedPath has one fewer entry than ancestors
+        // (it doesn't include <html> itself), so truncate it accordingly.
+        let truncatedPath: [Int]
+        if index == 0 {
+            truncatedPath = []
+        } else if index <= xraySelectedPath.count {
+            truncatedPath = Array(xraySelectedPath.prefix(index))
+        } else {
+            truncatedPath = xraySelectedPath
+        }
+
+        // Truncate the ancestor chain so the new "self" is the chosen ancestor.
+        let newAncestors = Array(xrayAncestors.prefix(index + 1))
+        xrayAncestors = newAncestors
+        xraySelectedElement = ancestor
+        xraySelectedPath = truncatedPath
+        xrayMatchedRules = CSSEngine.findRules(matching: ancestor, in: document.text)
+
+        // Tell the webview to update the green outline.
+        pendingXRayPathRequest = XRaySelectionRequest(id: UUID(), path: truncatedPath)
+
+        // Move the editor caret to the first matched rule, if any.
+        if let first = xrayMatchedRules.first {
+            selectRule(first)
+        } else {
+            currentRule = nil
+        }
+    }
+
+    /// Create a new CSS block for the currently selected X-Ray element.
+    func createRuleForSelectedElement() {
+        guard let element = xraySelectedElement else { return }
+        createNewRule(for: element)
     }
 
     /// Selects the given rule: moves the editor caret inside it (which

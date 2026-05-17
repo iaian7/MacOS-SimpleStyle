@@ -23,6 +23,10 @@ struct InspectorView: View {
             .padding(12)
             .background(.bar)
 
+            if viewModel.xraySelectedElement != nil {
+                ElementTreeView(viewModel: viewModel)
+            }
+
             if let element = viewModel.xraySelectedElement {
                 MatchedRulesListView(element: element, viewModel: viewModel)
             }
@@ -55,6 +59,72 @@ struct InspectorView: View {
                 .padding(12)
             }
         }
+    }
+}
+
+// MARK: - Element Tree
+
+private struct ElementTreeView: View {
+    @ObservedObject var viewModel: EditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Element Tree")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button {
+                    viewModel.createRuleForSelectedElement()
+                } label: {
+                    Label("New Rule", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help("Create a new rule for the selected element")
+            }
+
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(viewModel.xrayAncestors.enumerated()), id: \.offset) { idx, ancestor in
+                        treeRow(index: idx, ancestor: ancestor)
+                    }
+                }
+            }
+            .frame(maxHeight: 160)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .overlay(Divider(), alignment: .bottom)
+    }
+
+    @ViewBuilder
+    private func treeRow(index: Int, ancestor: XRayElementInfo) -> some View {
+        let isSelected = index == viewModel.xrayAncestors.count - 1
+        Button {
+            viewModel.selectXRayAncestor(at: index)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: isSelected ? "chevron.right.circle.fill" : "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                Text(ancestor.displayLabel)
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+            }
+            .padding(.leading, CGFloat(index) * 10)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -199,13 +269,16 @@ private struct PropertyRow: View {
             ColorPropertyControl(definition: definition, viewModel: viewModel)
 
         case let .option(options):
+            let current = viewModel.rawValue(for: definition)
+            let resolved = current.isEmpty ? definition.placeholder : current
+            let needsCustomTag = !options.contains(resolved)
             Picker("", selection: Binding(
-                get: {
-                    let current = viewModel.rawValue(for: definition)
-                    return current.isEmpty ? definition.placeholder : current
-                },
+                get: { resolved },
                 set: { viewModel.updateProperty(definition, value: $0) }
             )) {
+                if needsCustomTag {
+                    Text(resolved.isEmpty ? "—" : resolved).tag(resolved)
+                }
                 ForEach(options, id: \.self) { option in
                     Text(option).tag(option)
                 }
@@ -226,13 +299,18 @@ private struct PropertyRow: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: .infinity)
 
+                let currentUnit = viewModel.measurementUnit(for: definition)
+                let needsCustomUnitTag = !units.contains(currentUnit)
                 Picker("", selection: Binding(
-                    get: { viewModel.measurementUnit(for: definition) },
+                    get: { currentUnit },
                     set: { unit in
                         let number = viewModel.measurementNumber(for: definition)
                         viewModel.updateMeasurementProperty(definition, numberOrRaw: number, unit: unit)
                     }
                 )) {
+                    if needsCustomUnitTag {
+                        Text(currentUnit.isEmpty ? "unitless" : currentUnit).tag(currentUnit)
+                    }
                     ForEach(units, id: \.self) { unit in
                         Text(unit.isEmpty ? "unitless" : unit).tag(unit)
                     }
@@ -281,6 +359,7 @@ private struct ColorPropertyControl: View {
                     isEditingText ? textValue : rawValue
                 },
                 set: { newText in
+                    isEditingText = true
                     textValue = newText
                     viewModel.updateProperty(definition, value: newText)
                 }
@@ -289,7 +368,12 @@ private struct ColorPropertyControl: View {
             .frame(maxWidth: .infinity)
             .onAppear { textValue = rawValue }
             .onChange(of: rawValue) { _, newRaw in
-                if !isEditingText { textValue = newRaw }
+                // Defer the local state mirror to the next runloop tick so
+                // SwiftUI doesn't see two state writes in the same frame.
+                guard !isEditingText, newRaw != textValue else { return }
+                DispatchQueue.main.async {
+                    textValue = newRaw
+                }
             }
             .onSubmit { isEditingText = false }
         }

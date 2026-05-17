@@ -37,6 +37,94 @@ struct WebPreviewView: NSViewRepresentable {
         } catch (e) {
             console.error('CSS Edit X-Ray: Failed to inject style tag.', e);
         }
+        
+        // Describe an element as { tag, id, classes }
+        window.csseditDescribeEl = function(el) {
+            if (!el || !el.tagName) return null;
+            const classes = [];
+            if (el.classList && el.classList.length > 0) {
+                for (let i = 0; i < el.classList.length; i++) {
+                    const c = el.classList[i];
+                    if (c !== 'cssedit-xray-hover' && c !== 'cssedit-xray-selected') {
+                        classes.push(c);
+                    }
+                }
+            }
+            return {
+                tag: el.tagName.toLowerCase(),
+                id: el.id || '',
+                classes: classes
+            };
+        };
+        
+        // Return an array of child indices from <html> down to el (inclusive).
+        // E.g. <html>'s third child's first child -> [2, 0].
+        window.csseditPathTo = function(el) {
+            const path = [];
+            let cur = el;
+            while (cur && cur.parentElement) {
+                const parent = cur.parentElement;
+                const idx = Array.prototype.indexOf.call(parent.children, cur);
+                path.unshift(idx);
+                cur = parent;
+            }
+            return path;
+        };
+        
+        // Resolve a path back to an element.
+        window.csseditElFromPath = function(path) {
+            let cur = document.documentElement;
+            if (!Array.isArray(path)) return null;
+            for (let i = 0; i < path.length; i++) {
+                if (!cur || !cur.children || path[i] >= cur.children.length) return null;
+                cur = cur.children[path[i]];
+            }
+            return cur;
+        };
+        
+        // Build the ancestor chain (from <html> down to el inclusive) as descriptors.
+        window.csseditAncestorsOf = function(el) {
+            const chain = [];
+            let cur = el;
+            while (cur && cur.tagName) {
+                chain.unshift(window.csseditDescribeEl(cur));
+                cur = cur.parentElement;
+            }
+            return chain;
+        };
+        
+        // Apply the persistent green outline to el (clearing any previous selection).
+        window.csseditApplySelection = function(el) {
+            if (window.csseditSelectedEl && window.csseditSelectedEl !== el) {
+                window.csseditSelectedEl.classList.remove('cssedit-xray-selected');
+            }
+            window.csseditSelectedEl = el || null;
+            if (el && el.classList) {
+                el.classList.add('cssedit-xray-selected');
+                if (typeof el.scrollIntoView === 'function') {
+                    try { el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' }); } catch (_) {}
+                }
+            }
+        };
+        
+        // Programmatic: select an element by its path and notify Swift.
+        window.csseditSelectByPath = function(path) {
+            const el = window.csseditElFromPath(path);
+            if (!el) return;
+            window.csseditApplySelection(el);
+            const ancestors = window.csseditAncestorsOf(el);
+            const elPath = window.csseditPathTo(el);
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cssedit) {
+                window.webkit.messageHandlers.cssedit.postMessage({
+                    type: 'elementSelected',
+                    tag: ancestors.length ? ancestors[ancestors.length - 1].tag : '',
+                    id: ancestors.length ? ancestors[ancestors.length - 1].id : '',
+                    classes: ancestors.length ? ancestors[ancestors.length - 1].classes : [],
+                    path: elPath,
+                    ancestors: ancestors
+                });
+            }
+        };
 
         document.addEventListener('mouseover', function(e) {
             if (!window.csseditXRayEnabled) return;
@@ -57,32 +145,20 @@ struct WebPreviewView: NSViewRepresentable {
             if (!e.target) return;
             const el = e.target;
             el.classList.remove('cssedit-xray-hover');
+            window.csseditApplySelection(el);
             
-            // Clear previous selection
-            if (window.csseditSelectedEl && window.csseditSelectedEl !== el) {
-                window.csseditSelectedEl.classList.remove('cssedit-xray-selected');
-            }
-            window.csseditSelectedEl = el;
-            el.classList.add('cssedit-xray-selected');
-            
-            const tag = el.tagName ? el.tagName.toLowerCase() : '';
-            const id = el.id || '';
-            let classes = [];
-            if (el.classList && el.classList.length > 0) {
-                for (let i = 0; i < el.classList.length; i++) {
-                    const c = el.classList[i];
-                    if (c !== 'cssedit-xray-hover' && c !== 'cssedit-xray-selected') {
-                        classes.push(c);
-                    }
-                }
-            }
+            const ancestors = window.csseditAncestorsOf(el);
+            const path = window.csseditPathTo(el);
+            const me = ancestors.length ? ancestors[ancestors.length - 1] : { tag: '', id: '', classes: [] };
             
             if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cssedit) {
                 window.webkit.messageHandlers.cssedit.postMessage({
                     type: 'elementSelected',
-                    tag: tag,
-                    id: id,
-                    classes: classes
+                    tag: me.tag,
+                    id: me.id,
+                    classes: me.classes,
+                    path: path,
+                    ancestors: ancestors
                 });
             }
         }, { capture: true, passive: false });
@@ -114,7 +190,8 @@ struct WebPreviewView: NSViewRepresentable {
             urlString: viewModel.previewURLString,
             reloadToken: viewModel.reloadToken,
             css: viewModel.previewCSS,
-            isXRayEnabled: viewModel.isXRayEnabled
+            isXRayEnabled: viewModel.isXRayEnabled,
+            pendingSelectionRequest: viewModel.pendingXRayPathRequest
         )
     }
 
@@ -128,8 +205,9 @@ struct WebPreviewView: NSViewRepresentable {
         private var pendingCSS = ""
         private var isLoading = false
         private var lastXRayEnabled = false
+        private var lastSelectionRequestID: UUID?
 
-        func sync(urlString: String, reloadToken: UUID, css: String, isXRayEnabled: Bool) {
+        func sync(urlString: String, reloadToken: UUID, css: String, isXRayEnabled: Bool, pendingSelectionRequest: XRaySelectionRequest?) {
             pendingCSS = css
 
             lastXRayEnabled = isXRayEnabled
@@ -150,6 +228,11 @@ struct WebPreviewView: NSViewRepresentable {
             if css != lastInjectedCSS {
                 inject(css: css)
             }
+            
+            if let request = pendingSelectionRequest, request.id != lastSelectionRequestID {
+                lastSelectionRequestID = request.id
+                selectElement(at: request.path)
+            }
         }
 
         // MARK: - WKScriptMessageHandler
@@ -162,11 +245,29 @@ struct WebPreviewView: NSViewRepresentable {
             let tag = (body["tag"] as? String) ?? ""
             let id = (body["id"] as? String) ?? ""
             let classes = (body["classes"] as? [String]) ?? []
+            let path = (body["path"] as? [Int]) ?? []
+            let rawAncestors = (body["ancestors"] as? [[String: Any]]) ?? []
             
             guard !tag.isEmpty else { return }
             
+            let ancestors: [XRayElementInfo] = rawAncestors.compactMap { dict in
+                let t = (dict["tag"] as? String) ?? ""
+                let i = (dict["id"] as? String) ?? ""
+                let c = (dict["classes"] as? [String]) ?? []
+                guard !t.isEmpty else { return nil }
+                return XRayElementInfo(tag: t, id: i, classes: c)
+            }
+            
             let info = XRayElementInfo(tag: tag, id: id, classes: classes)
-            parent?.viewModel.handleXRayElementSelected(info)
+            parent?.viewModel.handleXRayElementSelected(info, path: path, ancestors: ancestors)
+        }
+        
+        // Tell the webview to programmatically select an element by its DOM path.
+        func selectElement(at path: [Int]) {
+            guard let webView else { return }
+            guard let data = try? JSONSerialization.data(withJSONObject: path, options: []),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript("window.csseditSelectByPath(\(json));", completionHandler: nil)
         }
 
         // MARK: - WKNavigationDelegate

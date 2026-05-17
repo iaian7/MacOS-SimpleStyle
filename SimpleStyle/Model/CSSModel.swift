@@ -20,6 +20,13 @@ struct XRayElementInfo: Equatable {
     }
 }
 
+/// A request to programmatically select an element in the webview, identified
+/// by its DOM path (array of child indices from <html>).
+struct XRaySelectionRequest: Equatable {
+    let id: UUID
+    let path: [Int]
+}
+
 struct CSSDeclaration: Identifiable, Equatable {
     let name: String
     let value: String
@@ -510,33 +517,57 @@ enum CSSEngine {
     }
 
     private static func makeDeclaration(from raw: String, absoluteStart: Int) -> CSSDeclaration? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        let trimmedFull = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedFull.isEmpty else {
             return nil
         }
 
-        guard let colonOffset = firstTopLevelColon(in: raw) else {
+        // Find how many leading whitespace/newline chars precede the real
+        // content so we can keep the declaration's range tight (i.e. excluding
+        // the newline that separates it from the previous declaration). This
+        // ensures that upsertProperty replaces *only* the declaration line,
+        // not the line break above it.
+        let rawChars = Array(raw)
+        var leading = 0
+        while leading < rawChars.count, rawChars[leading].isWhitespace {
+            leading += 1
+        }
+        var trailing = rawChars.count
+        while trailing > leading, rawChars[trailing - 1].isWhitespace {
+            trailing -= 1
+        }
+        // Keep the trailing semicolon as part of the declaration range when present.
+        // The trim above already stops at non-whitespace, so the `;` (if any) is included.
+
+        let content = String(rawChars[leading..<trailing])
+        let contentNS = content as NSString
+        guard let colonOffset = firstTopLevelColon(in: content) else {
             return nil
         }
 
-        let rawNSString = raw as NSString
-        let name = rawNSString.substring(to: colonOffset).trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = contentNS.substring(to: colonOffset).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             return nil
         }
 
-        var value = rawNSString.substring(from: colonOffset + 1)
+        var value = contentNS.substring(from: colonOffset + 1)
         if value.hasSuffix(";") {
             value.removeLast()
         }
 
-        let indentation = raw.prefix { $0 == " " || $0 == "\t" }
+        // Pull indentation from the characters preceding `content` in `raw`,
+        // limited to spaces/tabs on the same line (i.e. after the last newline).
+        var indentStart = leading
+        while indentStart > 0, rawChars[indentStart - 1] == " " || rawChars[indentStart - 1] == "\t" {
+            indentStart -= 1
+        }
+        let indentation = String(rawChars[indentStart..<leading])
 
         return CSSDeclaration(
             name: name,
             value: value.trimmingCharacters(in: .whitespacesAndNewlines),
-            range: NSRange(location: absoluteStart, length: rawNSString.length),
-            indentation: String(indentation)
+            range: NSRange(location: absoluteStart + leading, length: contentNS.length),
+            indentation: indentation
         )
     }
 
